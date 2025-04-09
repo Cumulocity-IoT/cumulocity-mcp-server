@@ -615,3 +615,24 @@ class AuditLogFormatter:
             for column, extractor in self.extractors.items()
         ]
         return tabulate(data, tablefmt="plain")
+
+
+class TableFormatter:
+    """Helper class for formatting generic tables using tabulate."""
+
+    @staticmethod
+    def print_table(
+        headers: List[str], rows: List[List[str]], tablefmt: str = "tsv"
+    ) -> str:
+        """Convert headers and rows to a formatted table.
+
+        Args:
+            headers: List of column headers
+            rows: List of rows, where each row is a list of values
+            tablefmt: Table format to use (default: 'tsv').
+                     See tabulate documentation for available formats.
+
+        Returns:
+            Formatted string containing the complete table with header and data rows
+        """
+        return tabulate(rows, headers=headers, tablefmt=tablefmt)
