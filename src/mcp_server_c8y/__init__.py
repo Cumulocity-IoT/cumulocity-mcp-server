@@ -15,9 +15,8 @@ logger = logging.getLogger(__name__)
 
 # CLI Entry Point
 @click.command()
-@click.option("--session", "-s", type=str, help="Cumulocity session")
 @click.option("-v", "--verbose", count=True)
-def main(session: str | None, verbose: bool) -> None:
+def main(verbose: bool) -> None:
     """MCP Cumulocity Server - Cumulocity functionality for MCP"""
     # Configure logging based on verbosity
     logging_level = logging.WARN

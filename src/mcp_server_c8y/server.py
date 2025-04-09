@@ -43,7 +43,7 @@ c8y: CumulocityApi = CumulocityApi(
 )
 
 # Initialize MCP server
-mcp: FastMCP = FastMCP("C8Y MCP Server")
+mcp = FastMCP("C8Y MCP Server")
 
 # Initialize formatters
 device_formatter = DeviceFormatter()
