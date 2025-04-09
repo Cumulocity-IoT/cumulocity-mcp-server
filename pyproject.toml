@@ -46,3 +46,4 @@ include = [
 
 [project.scripts]
 mcp-c8y = "mcp_server_c8y:main"
+mcp-server-c8y = "mcp_server_c8y:main"
