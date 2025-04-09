@@ -69,17 +69,6 @@ After installation, you can run it as a script using:
 python -m mcp_server_c8y
 ```
 
-## Configuration
-
-Create a `.env` file in the project root with the following variables:
-
-```env
-C8Y_BASE_URL=<your-cumulocity-base-url>
-C8Y_TENANT_ID=<your-tenant-id>
-C8Y_USERNAME=<your-username>
-C8Y_PASSWORD=<your-password>
-```
-
 ### Usage with Claude Desktop
 
 This MCP Server can be used with Claude Desktop to enable Claude to interact with your Cumulocity IoT platform. Follow these steps to set it up:
