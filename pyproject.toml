@@ -1,0 +1,48 @@
+[project]
+name = "mcp-server-c8y"
+version = "0.1.0"
+description = "A Python-based MCP server for Cumulocity IoT platform integration"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "Apache-2.0"}
+authors = [
+    {name = "Cumulocity"}
+]
+keywords = ["mcp", "cumulocity", "iot", "device-management", "measurements", "alarms"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+dependencies = [
+    "httpx>=0.28.1",
+    "mcp[cli]>=1.6.0",
+    "pydantic>=2.0.0",
+    "click>=8.0.0",
+    "c8y-api>=3.2.1",
+    "python-dotenv>=1.0.0",
+    "tabulate>=0.9.0",
+]
+
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/mcp_server_c8y"]
+
+[tool.hatch.build]
+include = [
+    "src/mcp_server_c8y/**/*.py",
+    "README.md",
+    "LICENSE",
+]
+
+[project.scripts]
+mcp-c8y = "mcp_server_c8y:main"
