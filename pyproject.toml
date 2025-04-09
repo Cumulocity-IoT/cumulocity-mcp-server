@@ -1,5 +1,5 @@
 [project]
-name = "mcp-server-c8y"
+name = "mcp_server_c8y"
 version = "0.1.0"
 description = "A Python-based MCP server for Cumulocity IoT platform integration"
 readme = "README.md"
