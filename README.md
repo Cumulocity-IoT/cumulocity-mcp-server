@@ -87,13 +87,32 @@ This MCP Server can be used with Claude Desktop to enable Claude to interact wit
 ```json
 {
   "mcpServers": {
-    "cumulocity": {
-      "command": "mcp-server-c8y",
-      "args": []
+    "mcp-c8y": {
+      "command": "/path/to/uv",
+      "args": [
+        "--directory",
+        "/path/to/mcp-c8y",
+        "run",
+        "mcp-c8y"
+      ],
+      "env": {
+        "C8Y_BASE_URL": "https://your-cumulocity-instance.com",
+        "C8Y_TENANT_ID": "your-tenant-id",
+        "C8Y_USERNAME": "your-username",
+        "C8Y_PASSWORD": "your-password"
+      }
     }
   }
 }
 ```
+
+Replace the following placeholders with your actual values:
+- `/path/to/uv`: Path to your uv executable
+- `/path/to/mcp-c8y`: Path to your mcp-c8y project directory
+- `https://your-cumulocity-instance.com`: Your Cumulocity instance URL
+- `your-tenant-id`: Your Cumulocity tenant ID
+- `your-username`: Your Cumulocity username
+- `your-password`: Your Cumulocity password
 
 4. Restart Claude Desktop
 
@@ -151,27 +170,6 @@ For more detailed information about using MCP Servers with Claude Desktop, visit
   - `severity`: Filter by severity level
   - `page_size`: Number of results to retrieve
 
-
-## License
-
-This project is licensed under the Apache License 2.0 - see below for details:
-
-```
-Copyright 2024 MCP Cumulocity Server Contributors
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-```
-
 ## Contributing
 
 We welcome contributions from everyone! Here's how you can contribute to this project:
@@ -185,20 +183,3 @@ We welcome contributions from everyone! Here's how you can contribute to this pr
    - Update documentation as needed
    - Ensure all tests pass
 4. Submit a pull request
-
-### Development Guidelines
-
-- Use meaningful variable and function names
-- Add comments for complex logic
-- Write unit tests for new functionality
-- Keep commits focused and atomic
-- Follow PEP 8 style guidelines
-- Use type hints for function parameters and return values
-
-### Pull Request Process
-
-1. Update the README.md with details of changes if needed
-2. Update the documentation if you're changing functionality
-3. The PR will be merged once you have the sign-off of at least one maintainer
-
-For more detailed contribution guidelines, please refer to our [Contributing Guide](CONTRIBUTING.md).
