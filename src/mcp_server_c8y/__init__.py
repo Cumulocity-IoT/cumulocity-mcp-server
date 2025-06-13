@@ -16,7 +16,9 @@ logger = logging.getLogger(__name__)
 # CLI Entry Point
 @click.command()
 @click.option("-v", "--verbose", count=True)
-def main(verbose: bool) -> None:
+@click.option("--host", default="127.0.0.1", help="Host to bind the server to")
+@click.option("--port", default=9000, help="Port to bind the server to")
+def main(verbose: bool, host: str, port: int) -> None:
     """MCP Cumulocity Server - Cumulocity functionality for MCP"""
     # Configure logging based on verbosity
     logging_level = logging.WARN
@@ -32,7 +34,7 @@ def main(verbose: bool) -> None:
     )
     logger.info("Starting MCP Cumulocity Server")
 
-    mcp.run(transport="stdio")
+    mcp.run(transport="streamable-http", host=host, port=port)
 
 
 if __name__ == "__main__":

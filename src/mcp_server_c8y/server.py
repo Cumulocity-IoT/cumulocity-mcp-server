@@ -9,7 +9,9 @@ from typing import Any, Dict, List
 
 from c8y_api import CumulocityApi
 from dotenv import load_dotenv
-from mcp.server.fastmcp import FastMCP
+from fastmcp import FastMCP
+from fastmcp.server.dependencies import get_http_request
+from starlette.requests import Request
 
 # Local imports
 from .formatters import (
@@ -26,24 +28,24 @@ logger = logging.getLogger(__name__)
 load_dotenv()
 
 # Cumulocity configuration
-C8Y_BASE_URL = os.getenv("C8Y_BASE_URL", "")
-C8Y_TENANT_ID = os.getenv("C8Y_TENANT_ID", "")
-C8Y_USERNAME = os.getenv("C8Y_USERNAME", "")
+C8Y_BASEURL = os.getenv("C8Y_BASEURL", "")
+C8Y_TENANT = os.getenv("C8Y_TENANT", "")
+C8Y_USER = os.getenv("C8Y_USER", "")
 C8Y_PASSWORD = os.getenv("C8Y_PASSWORD", "")
 
 # Validate required environment variables
-if not all([C8Y_BASE_URL, C8Y_TENANT_ID, C8Y_USERNAME, C8Y_PASSWORD]):
+if not all([C8Y_BASEURL, C8Y_TENANT, C8Y_USER, C8Y_PASSWORD]):
     raise ValueError(
-        "Missing required environment variables. Please set C8Y_BASE_URL, "
-        "C8Y_TENANT_ID, C8Y_USERNAME, and C8Y_PASSWORD."
+        "Missing required environment variables. Please set C8Y_BASEURL, "
+        "C8Y_TENANT, C8Y_USER, and C8Y_PASSWORD."
     )
 
 # Initialize Cumulocity API client
-logger.info(f"Initializing Cumulocity API client with base URL: {C8Y_BASE_URL}")
+logger.info(f"Initializing Cumulocity API client with base URL: {C8Y_BASEURL}")
 c8y: CumulocityApi = CumulocityApi(
-    base_url=C8Y_BASE_URL,
-    tenant_id=C8Y_TENANT_ID,
-    username=C8Y_USERNAME,
+    base_url=C8Y_BASEURL,
+    tenant_id=C8Y_TENANT,
+    username=C8Y_USER,
     password=C8Y_PASSWORD,
 )
 
@@ -53,6 +55,25 @@ mcp = FastMCP("C8Y MCP Server")
 # Initialize formatters
 device_formatter = DeviceFormatter()
 measurement_formatter = MeasurementFormatter(show_source=False)
+
+
+@mcp.tool
+async def user_agent_info() -> dict:
+    """Return information about the user agent."""
+    # Get the HTTP request
+    request: Request = get_http_request()
+
+    # Access request data
+    user_agent = request.headers.get("user-agent", "Unknown")
+    client_ip = request.client.host if request.client else "Unknown"
+    authorization = request.headers.get("Authorization", "Not provided")
+
+    return {
+        "user_agent": user_agent,
+        "client_ip": client_ip,
+        "path": request.url.path,
+        "Authorization": authorization,
+    }
 
 
 @mcp.tool()
