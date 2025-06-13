@@ -14,4 +14,5 @@ RUN uv sync --locked
 EXPOSE 80
 
 # Set the entry point
-ENTRYPOINT ["uv", "run", "mcp-server-c8y", "--host", "0.0.0.0", "--port", "80"]
+#ENTRYPOINT ["uv", "run", "mcp-server-c8y",  "--host", "0.0.0.0", "--port", "80", "--transport", "hybrid", "--root-path", "/service/mcp-server-c8y"]
+ENTRYPOINT uv run mcp-server-c8y --host 0.0.0.0 --port 80 --transport hybrid --root-path /service/$APPLICATION_NAME

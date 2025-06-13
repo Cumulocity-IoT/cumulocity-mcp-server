@@ -15,8 +15,6 @@ from fastmcp import FastMCP
 from fastmcp.server.dependencies import get_http_headers
 from requests.auth import HTTPBasicAuth
 from starlette.exceptions import HTTPException
-from starlette.requests import Request
-from starlette.responses import JSONResponse
 
 # Local imports
 from .formatters import (
@@ -95,11 +93,6 @@ def get_c8y():
         )
 
     return CumulocityApi(base_url=C8Y_BASEURL, tenant_id=C8Y_TENANT, auth=get_auth())
-
-
-@mcp.custom_route("/health", methods=["GET"])
-async def health_check(request: Request) -> JSONResponse:
-    return JSONResponse({"status": "up"})
 
 
 @mcp.tool()
