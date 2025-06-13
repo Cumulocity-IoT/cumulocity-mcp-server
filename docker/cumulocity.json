@@ -1,0 +1,33 @@
+{
+    "apiVersion": "2",
+    "name": "mcp-server-c8y",
+    "version": "1.0.2",
+    "provider": {
+        "name": "Cumulocity"
+    },
+    "isolation": "PER_TENANT",
+    "scale": "NONE",
+    "replicas": 1,
+    "livenessProbe": {
+        "httpGet": {
+            "path": "/health"
+        },
+        "initialDelaySeconds": 10
+    },
+    "resources": {
+        "cpu": "0.25",
+        "memory": "128M"
+    },
+    "requestedResources":{
+            "cpu": "100m",
+            "memory": "128Mi"
+    },
+    "readinessProbe": {
+        "httpGet": {
+            "path": "/health"
+        },
+        "initialDelaySeconds": 10
+    },
+    "requiredRoles": [ ],
+    "roles": [ ]
+}

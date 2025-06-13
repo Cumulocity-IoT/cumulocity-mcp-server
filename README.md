@@ -48,14 +48,16 @@ A Python-based server that provides Cumulocity IoT platform functionality throug
   - `severity`: Filter by severity level
   - `page_size`: Number of results to retrieve
 
-## Installation
+## Installation & Deployment
 
-### Using uv (recommended)
+### Local Installation
 
-When using [`uv`](https://docs.astral.sh/uv/) no specific installation is needed. We will
+#### Using uv (recommended)
+
+When using [`uv`](https://docs.astral.sh/uv/) no specific installation is needed for this package. We will
 use [`uvx`](https://docs.astral.sh/uv/guides/tools/) to directly run *mcp-server-c8y*.
 
-### Using PIP
+#### Using PIP
 
 Alternatively you can install `mcp-server-c8y` via pip:
 
@@ -68,6 +70,35 @@ After installation, you can run it as a script using:
 ```bash
 python -m mcp_server_c8y
 ```
+
+### Deployment on Cumulocity Tenant
+
+You can deploy this server as a Cumulocity microservice for direct integration with your tenant. This is done by uploading a special deployment package (`mcp-server-c8y.zip`) to your Cumulocity tenant.
+
+#### Building the Microservice Deployment Package
+
+1. Ensure you have Docker and zip installed on your system.
+2. Run the provided build script to create the deployment package:
+
+```bash
+./scripts/buildcontainer.sh
+```
+
+This will:
+- Build the Docker image for the microservice
+- Save the image as `image.tar` in the `docker/` directory
+- Package `image.tar` and `cumulocity.json` into `docker/mcp-server-c8y.zip`
+
+#### Deploying to Cumulocity
+
+1. Log in to your Cumulocity tenant as a user with microservice deployment permissions.
+2. Navigate to **Administration > Ecosystem > Microservices**.
+3. Click **Add microservice** and upload the `mcp-server-c8y.zip` file from the `docker/` directory.
+4. Wait for the microservice to be deployed and started. You should see its status as "Available" once ready.
+5. The microservice will be accessible under your tenant's service URL, typically:
+   `https://<your-tenant>.cumulocity.com/service/mcp-server-c8y/mcp/`
+
+For more details on Cumulocity microservice deployment, see the [official documentation](https://cumulocity.com/guides/microservice-sdk/concept/).
 
 ### Usage with Claude Desktop
 
@@ -88,38 +119,25 @@ This MCP Server can be used with Claude Desktop to enable Claude to interact wit
 
 ```json
 "mcpServers": {
-  "c8y": {
+  "mcp-c8y": {
     "command": "uvx",
-    "args": ["mcp-server-c8y"],
-      "env": {
-        "C8Y_BASE_URL": "https://your-cumulocity-instance.com",
-        "C8Y_TENANT_ID": "your-tenant-id",
-        "C8Y_USERNAME": "your-username",
-        "C8Y_PASSWORD": "your-password"
-      }
+    "args": [
+      "mcp-server-c8y",
+      "--transport",
+      "stdio"
+    ],
+    "env": {
+      "C8Y_BASEURL": "https://your-cumulocity-instance.com",
+      "C8Y_TENANT": "your-tenant-id",
+      "C8Y_USER": "<your-username>",
+      "C8Y_PASSWORD": "<your-password>"
+    }
   }
 }
 ```
 </details>
 
-<details>
-<summary>Using pip installation</summary>
 
-```json
-"mcpServers": {
-  "c8y": {
-    "command": "python",
-    "args": ["-m", "mcp_server_c8y"],
-      "env": {
-        "C8Y_BASE_URL": "https://your-cumulocity-instance.com",
-        "C8Y_TENANT_ID": "your-tenant-id",
-        "C8Y_USERNAME": "your-username",
-        "C8Y_PASSWORD": "your-password"
-      }
-  }
-}
-```
-</details>
 
 Replace the following placeholders with your actual values:
 - `https://your-cumulocity-instance.com`: Your Cumulocity instance URL
@@ -133,10 +151,25 @@ Replace the following placeholders with your actual values:
 
 For more detailed information about using MCP Servers with Claude Desktop, visit the [official MCP documentation](https://modelcontextprotocol.io/quickstart/user).
 
-### Options
 
-- `--session, -s`: Specify a Cumulocity session
-- `-v, --verbose`: Increase verbosity (can be used multiple times)
+## Cursor MCP Server Settings Example
+
+If you are using Cursor and have deployed your MCP Server to a Cumulocity tenant, you can configure your MCP server connection with a `.cursor/mcp.json` file. Example (with sensitive data anonymized):
+
+```json
+{
+  "mcpServers": {
+    "Cumulocity": {
+      "url": "https://your-cumulocity-instance.com/service/mcp-server-c8y/mcp/",
+      "headers": {
+        "Authorization": "Basic <YOUR_BASE64_AUTH_TOKEN>"
+      }
+    }
+  }
+}
+```
+- `https://your-cumulocity-instance.com`: Your Cumulocity instance URL
+- Replace `<YOUR_BASE64_AUTH_TOKEN>` with your actual Base64-encoded credentials. Never commit real credentials to version control.
 
 ## Contributing
 

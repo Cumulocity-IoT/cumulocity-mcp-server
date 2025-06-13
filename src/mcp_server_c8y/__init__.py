@@ -17,8 +17,15 @@ logger = logging.getLogger(__name__)
 @click.command()
 @click.option("-v", "--verbose", count=True)
 @click.option("--host", default="127.0.0.1", help="Host to bind the server to")
-@click.option("--port", default=9000, help="Port to bind the server to")
-def main(verbose: bool, host: str, port: int) -> None:
+@click.option("--port", default=80, help="Port to bind the server to")
+@click.option(
+    "--transport",
+    type=click.Choice(["sse", "streamable-http", "stdio"], case_sensitive=False),
+    default="streamable-http",
+    show_default=True,
+    help="Transport to use: sse, streamable-http, or stdio",
+)
+def main(verbose: bool, host: str, port: int, transport: str) -> None:
     """MCP Cumulocity Server - Cumulocity functionality for MCP"""
     # Configure logging based on verbosity
     logging_level = logging.WARN
@@ -34,7 +41,12 @@ def main(verbose: bool, host: str, port: int) -> None:
     )
     logger.info("Starting MCP Cumulocity Server")
 
-    mcp.run(transport="streamable-http", host=host, port=port)
+    mcp._selected_transport = transport
+
+    if transport == "stdio":
+        mcp.run(transport=transport)
+    else:
+        mcp.run(transport=transport, host=host, port=port)
 
 
 if __name__ == "__main__":

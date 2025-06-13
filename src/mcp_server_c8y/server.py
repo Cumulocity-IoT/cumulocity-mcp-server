@@ -2,16 +2,20 @@
 Server initialization and configuration for MCP Cumulocity Server.
 """
 
+import base64
 import logging
 import os
 from datetime import datetime
 from typing import Any, Dict, List
 
 from c8y_api import CumulocityApi
+from c8y_api._auth import HTTPBearerAuth
 from dotenv import load_dotenv
 from fastmcp import FastMCP
 from fastmcp.server.dependencies import get_http_request
+from requests.auth import AuthBase, HTTPBasicAuth
 from starlette.requests import Request
+from starlette.responses import JSONResponse
 
 # Local imports
 from .formatters import (
@@ -34,20 +38,13 @@ C8Y_USER = os.getenv("C8Y_USER", "")
 C8Y_PASSWORD = os.getenv("C8Y_PASSWORD", "")
 
 # Validate required environment variables
-if not all([C8Y_BASEURL, C8Y_TENANT, C8Y_USER, C8Y_PASSWORD]):
+if not all([C8Y_BASEURL, C8Y_TENANT]):
     raise ValueError(
-        "Missing required environment variables. Please set C8Y_BASEURL, "
-        "C8Y_TENANT, C8Y_USER, and C8Y_PASSWORD."
+        "Missing required environment variables. Please set C8Y_BASEURL, " "C8Y_TENANT."
     )
 
 # Initialize Cumulocity API client
 logger.info(f"Initializing Cumulocity API client with base URL: {C8Y_BASEURL}")
-c8y: CumulocityApi = CumulocityApi(
-    base_url=C8Y_BASEURL,
-    tenant_id=C8Y_TENANT,
-    username=C8Y_USER,
-    password=C8Y_PASSWORD,
-)
 
 # Initialize MCP server
 mcp = FastMCP("C8Y MCP Server")
@@ -57,27 +54,42 @@ device_formatter = DeviceFormatter()
 measurement_formatter = MeasurementFormatter(show_source=False)
 
 
-@mcp.tool
-async def user_agent_info() -> dict:
-    """Return information about the user agent."""
+def get_auth():
     # Get the HTTP request
     request: Request = get_http_request()
-
-    # Access request data
-    user_agent = request.headers.get("user-agent", "Unknown")
-    client_ip = request.client.host if request.client else "Unknown"
     authorization = request.headers.get("Authorization", "Not provided")
 
-    return {
-        "user_agent": user_agent,
-        "client_ip": client_ip,
-        "path": request.url.path,
-        "Authorization": authorization,
-    }
+    if authorization.startswith("Basic "):
+        encoded = authorization.split(" ")[1]
+        decoded = base64.b64decode(encoded).decode("utf-8")
+        username, password = decoded.split(":", 1)
+        return HTTPBasicAuth(username, password)
+    elif authorization.startswith("Bearer "):
+        token = authorization.split(" ")[1]
+        return HTTPBearerAuth(token)
+    # Add other auth types as needed
+    return AuthBase()
+
+
+def get_c8y():
+    if mcp._selected_transport == "stdio":
+        return CumulocityApi(
+            base_url=C8Y_BASEURL,
+            tenant_id=C8Y_TENANT,
+            username=C8Y_USER,
+            password=C8Y_PASSWORD,
+        )
+
+    return CumulocityApi(base_url=C8Y_BASEURL, tenant_id=C8Y_TENANT, auth=get_auth())
+
+
+@mcp.custom_route("/health", methods=["GET"])
+async def health_check(request: Request) -> JSONResponse:
+    return JSONResponse({"status": "up"})
 
 
 @mcp.tool()
-def get_devices(
+async def get_devices(
     type: str | None = None,
     name: str | None = None,
     page_size: int = 5,
@@ -103,6 +115,8 @@ def get_devices(
         - Minor Alarms: Number of minor alarms
         - Warning Alarms: Number of warning alarms
     """
+    c8y = get_c8y()
+
     devices = c8y.device_inventory.get_all(
         page_size=min(page_size, 2000),
         page_number=current_page,
@@ -116,7 +130,7 @@ def get_devices(
 
 
 @mcp.tool()
-def get_child_devices(device_id: str, page_size: int = 10) -> str:
+async def get_child_devices(device_id: str, page_size: int = 10) -> str:
     """Get child devices of a specific device.
 
     Args:
@@ -135,6 +149,7 @@ def get_child_devices(device_id: str, page_size: int = 10) -> str:
         - Minor Alarms: Number of minor alarms
         - Warning Alarms: Number of warning alarms
     """
+    c8y = get_c8y()
     children = c8y.inventory.get_all(parent=device_id, page_size=min(page_size, 2000))
     if len(children) == 0:
         return "No child devices found"
@@ -142,7 +157,7 @@ def get_child_devices(device_id: str, page_size: int = 10) -> str:
 
 
 @mcp.tool()
-def get_device_context(
+async def get_device_context(
     device_id: str,
     child_devices_limit: int = 10,
 ) -> str:
@@ -161,6 +176,7 @@ def get_device_context(
         - Total number of child devices and details for up to the specified limit
     """
     try:
+        c8y = get_c8y()
         device = c8y.inventory.get(device_id)
     except Exception as e:
         raise ValueError(f"Failed to retrieve device {device_id}: {str(e)}")
@@ -301,7 +317,7 @@ def get_device_context(
 
 
 @mcp.tool()
-def get_device_measurements(
+async def get_device_measurements(
     device_id: str,
     date_from: str | None = datetime.today().strftime("%Y-%m-%dT00:00:00.000Z"),
     date_to: str | None = None,
@@ -325,6 +341,7 @@ def get_device_measurements(
         Formatted string containing measurement data in a table format
     """
     try:
+        c8y = get_c8y()
         # Get measurements for the device
         measurements = c8y.measurements.get_all(
             source=device_id,
@@ -348,7 +365,7 @@ def get_device_measurements(
 
 
 @mcp.tool()
-def get_active_alarms(
+async def get_active_alarms(
     severity: str | None = None,
     page_size: int = 10,
 ) -> List[Dict[str, Any]]:
@@ -364,6 +381,7 @@ def get_active_alarms(
     Returns:
         List of alarms including device id, last updated, severity, status, and description
     """
+    c8y = get_c8y()
     alarms = c8y.alarms.get_all(
         page_size=min(page_size, 2000),
         page_number=1,

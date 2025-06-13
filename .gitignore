@@ -13,3 +13,10 @@ wheels/
 .venv
 .env
 .pypirc
+
+# Distribution packages
+*.tar
+*.zip
+
+# Mac generated files
+.DS_Store
