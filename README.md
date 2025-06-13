@@ -1,4 +1,4 @@
-# MCP Cumulocity Server
+# Cumulocity MCP Server
 
 A Python-based server that provides Cumulocity IoT platform functionality through the MCP (Model Control Protocol) interface. This server enables seamless interaction with Cumulocity's device management, measurements, and alarm systems.
 
