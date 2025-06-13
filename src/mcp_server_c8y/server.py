@@ -12,8 +12,9 @@ from c8y_api import CumulocityApi
 from c8y_api._auth import HTTPBearerAuth
 from dotenv import load_dotenv
 from fastmcp import FastMCP
-from fastmcp.server.dependencies import get_http_request
-from requests.auth import AuthBase, HTTPBasicAuth
+from fastmcp.server.dependencies import get_http_headers
+from requests.auth import HTTPBasicAuth
+from starlette.exceptions import HTTPException
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
@@ -56,19 +57,32 @@ measurement_formatter = MeasurementFormatter(show_source=False)
 
 def get_auth():
     # Get the HTTP request
-    request: Request = get_http_request()
-    authorization = request.headers.get("Authorization", "Not provided")
+    headers = get_http_headers()
+    authorization = headers.get("authorization")
+
+    if not authorization:
+        raise HTTPException(status_code=401, detail="Missing Authorization header.")
 
     if authorization.startswith("Basic "):
-        encoded = authorization.split(" ")[1]
-        decoded = base64.b64decode(encoded).decode("utf-8")
-        username, password = decoded.split(":", 1)
-        return HTTPBasicAuth(username, password)
+        try:
+            encoded = authorization.split(" ")[1]
+            decoded = base64.b64decode(encoded).decode("utf-8")
+            username, password = decoded.split(":", 1)
+            return HTTPBasicAuth(username, password)
+        except Exception:
+            raise HTTPException(
+                status_code=401, detail="Invalid Basic authentication credentials."
+            )
     elif authorization.startswith("Bearer "):
-        token = authorization.split(" ")[1]
-        return HTTPBearerAuth(token)
+        try:
+            token = authorization.split(" ")[1]
+            return HTTPBearerAuth(token)
+        except Exception:
+            raise HTTPException(status_code=401, detail="Invalid Bearer token.")
     # Add other auth types as needed
-    return AuthBase()
+    raise HTTPException(
+        status_code=401, detail="Unsupported or missing authentication method."
+    )
 
 
 def get_c8y():
@@ -116,16 +130,15 @@ async def get_devices(
         - Warning Alarms: Number of warning alarms
     """
     c8y = get_c8y()
-
     devices = c8y.device_inventory.get_all(
         page_size=min(page_size, 2000),
         page_number=current_page,
         type=type,
         name=name,
     )
+
     if len(devices) == 0:
         return "No devices found"
-
     return device_formatter.devices_to_table(devices)
 
 

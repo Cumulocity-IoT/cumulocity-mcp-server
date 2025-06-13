@@ -398,7 +398,7 @@ wheels = [
 
 [[package]]
 name = "mcp-server-c8y"
-version = "0.1.3"
+version = "0.1.4"
 source = { editable = "." }
 dependencies = [
     { name = "c8y-api" },

@@ -1,7 +1,7 @@
 {
     "apiVersion": "2",
     "name": "mcp-server-c8y",
-    "version": "1.0.2",
+    "version": "0.1.4",
     "provider": {
         "name": "Cumulocity"
     },

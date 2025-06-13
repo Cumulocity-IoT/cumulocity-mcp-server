@@ -1,5 +1,7 @@
 #!/bin/bash
 
+uv lock
+
 docker build -t mcp-c8y -f docker/Dockerfile --platform linux/amd64 .
 
 cd docker

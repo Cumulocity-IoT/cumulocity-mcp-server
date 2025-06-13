@@ -2,6 +2,7 @@
 MCP Cumulocity Server - Cumulocity functionality for MCP
 """
 
+import asyncio
 import logging
 import sys
 
@@ -44,9 +45,9 @@ def main(verbose: bool, host: str, port: int, transport: str) -> None:
     mcp._selected_transport = transport
 
     if transport == "stdio":
-        mcp.run(transport=transport)
+        asyncio.run(mcp.run_async(transport=transport))
     else:
-        mcp.run(transport=transport, host=host, port=port)
+        asyncio.run(mcp.run_async(transport=transport, host=host, port=port))
 
 
 if __name__ == "__main__":
