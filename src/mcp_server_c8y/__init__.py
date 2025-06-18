@@ -46,6 +46,7 @@ def main(verbose: int, host: str, port: int, transport: str, root_path: str) -> 
     logger = setup_logging(verbose)
     logger.info("Starting MCP Cumulocity Server")
 
+    settings.init()
     settings.selected_transport = transport
 
     if transport == "stdio":

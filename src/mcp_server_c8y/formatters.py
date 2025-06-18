@@ -2,10 +2,11 @@
 Formatters for Cumulocity data types.
 """
 
+import json
 import unicodedata
 from typing import Any, Dict, List
 
-from c8y_api.model import Alarm, Device, Measurement
+from c8y_api.model import Alarm, Device, ManagedObject, Measurement
 from tabulate import tabulate
 
 
@@ -95,7 +96,7 @@ class DeviceFormatter:
         self.columns = self.config["columns"]
         self.extractors = self.config["extractors"]
 
-    def device_to_row(self, device: Device) -> List[str]:
+    def device_to_row(self, device: Device | ManagedObject) -> List[str]:
         """Convert a Device object to a list of values.
 
         Args:
@@ -106,7 +107,9 @@ class DeviceFormatter:
         """
         return [extractor(device) for extractor in self.extractors.values()]
 
-    def devices_to_table(self, devices: List[Device], tablefmt: str = "tsv") -> str:
+    def devices_to_table(
+        self, devices: List[ManagedObject] | List[Device], tablefmt: str = "tsv"
+    ) -> str:
         """Convert a list of Device objects to a formatted table.
 
         Args:
@@ -120,7 +123,7 @@ class DeviceFormatter:
         rows = [self.device_to_row(device) for device in devices]
         return tabulate(rows, headers=self.columns, tablefmt=tablefmt)
 
-    def device_to_formatted_string(self, device: Device) -> str:
+    def device_to_formatted_string(self, device: Device | ManagedObject) -> str:
         """Convert a Device object to a formatted string with key-value pairs.
 
         Args:
@@ -186,7 +189,11 @@ class MeasurementFormatter:
         lines = []
 
         # Add source ID if configured
-        if self.show_source and hasattr(measurement, "source"):
+        if (
+            self.show_source
+            and hasattr(measurement, "source")
+            and measurement.source is not None
+        ):
             lines.append(f"Source: {measurement.source.id}")
 
         # Add timestamp
@@ -234,7 +241,9 @@ class MeasurementFormatter:
             row = [measurement.time]
             if self.show_source:
                 row.append(
-                    measurement.source.id if hasattr(measurement, "source") else ""
+                    measurement.source.id
+                    if hasattr(measurement, "source") and measurement.source is not None
+                    else ""
                 )
 
             # Add values for each fragment->series column
@@ -253,6 +262,8 @@ class MeasurementFormatter:
 
             rows.append(row)
 
+        if tablefmt == "json":
+            return json.dumps(rows)
         return tabulate(rows, headers=columns, tablefmt=tablefmt)
 
 
@@ -321,6 +332,8 @@ class AlarmFormatter:
             Formatted string containing the complete table with header and data rows
         """
         rows = [self.alarm_to_row(alarm) for alarm in alarms]
+        if tablefmt == "json":
+            return json.dumps(rows)
         return tabulate(rows, headers=self.columns, tablefmt=tablefmt)
 
     def alarm_to_formatted_string(self, alarm: Any) -> str:
@@ -408,6 +421,8 @@ class EventFormatter:
             Formatted string containing the complete table with header and data rows
         """
         rows = [self.event_to_row(event) for event in events]
+        if tablefmt == "json":
+            return json.dumps(rows)
         return tabulate(rows, headers=self.columns, tablefmt=tablefmt)
 
     def event_to_formatted_string(self, event: Any) -> str:
@@ -501,6 +516,8 @@ class OperationFormatter:
             Formatted string containing the complete table with header and data rows
         """
         rows = [self.operation_to_row(operation) for operation in operations]
+        if tablefmt == "json":
+            return json.dumps(rows)
         return tabulate(rows, headers=self.columns, tablefmt=tablefmt)
 
     def operation_to_formatted_string(self, operation: Any) -> str:
@@ -599,6 +616,8 @@ class AuditLogFormatter:
             Formatted string containing the complete table with header and data rows
         """
         rows = [self.audit_log_to_row(audit_log) for audit_log in audit_logs]
+        if tablefmt == "json":
+            return json.dumps(rows)
         return tabulate(rows, headers=self.columns, tablefmt=tablefmt)
 
     def audit_log_to_formatted_string(self, audit_log: Any) -> str:
@@ -635,4 +654,6 @@ class TableFormatter:
         Returns:
             Formatted string containing the complete table with header and data rows
         """
+        if tablefmt == "json":
+            return json.dumps(rows)
         return tabulate(rows, headers=headers, tablefmt=tablefmt)

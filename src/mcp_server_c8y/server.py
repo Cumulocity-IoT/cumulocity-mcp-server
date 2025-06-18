@@ -3,15 +3,18 @@ Server initialization and configuration for MCP Cumulocity Server.
 """
 
 import base64
+import json
 import os
 from datetime import datetime
-from typing import Any, Dict, List
+from typing import Annotated, Dict, Optional
 
+import requests
 from c8y_api import CumulocityApi
 from c8y_api._auth import HTTPBearerAuth
 from dotenv import load_dotenv
 from fastmcp import FastMCP
 from fastmcp.server.dependencies import get_http_headers
+from pydantic import Field
 from requests.auth import HTTPBasicAuth
 from starlette.exceptions import HTTPException
 
@@ -25,6 +28,13 @@ from .formatters import (
     TableFormatter,
 )
 from .logging_setup import logger
+from .openapi import fetch_openapi_spec
+from .utils import (
+    get_additional_headers,
+    is_tool_blacklisted,
+    normalize_tool_name,
+    strip_parameters,
+)
 
 # Load environment variables
 load_dotenv()
@@ -38,14 +48,13 @@ C8Y_PASSWORD = os.getenv("C8Y_PASSWORD", "")
 # Validate required environment variables
 if not all([C8Y_BASEURL, C8Y_TENANT]):
     raise ValueError(
-        "Missing required environment variables. Please set C8Y_BASEURL, " "C8Y_TENANT."
+        "Missing required environment variables. Please set C8Y_BASEURL, C8Y_TENANT."
     )
-
-# Initialize Cumulocity API client
-logger.info(f"Initializing Cumulocity API client with base URL: {C8Y_BASEURL}")
 
 # Initialize MCP server
 mcp = FastMCP("C8Y MCP Server")
+spec = None  # Global spec for resources
+c8y = None
 
 # Initialize formatters
 device_formatter = DeviceFormatter()
@@ -58,6 +67,8 @@ def get_auth():
     authorization = headers.get("authorization")
 
     if not authorization:
+        if settings.selected_transport == "stdio":
+            return HTTPBasicAuth(f"{C8Y_TENANT}/{C8Y_USER}", C8Y_PASSWORD)
         raise HTTPException(status_code=401, detail="Missing Authorization header.")
 
     if authorization.startswith("Basic "):
@@ -83,50 +94,276 @@ def get_auth():
 
 
 def get_c8y():
-    if settings.selected_transport == "stdio":
-        return CumulocityApi(
-            base_url=C8Y_BASEURL,
-            tenant_id=C8Y_TENANT,
-            username=C8Y_USER,
-            password=C8Y_PASSWORD,
-        )
+    global c8y
+    if c8y:
+        return c8y
 
-    return CumulocityApi(base_url=C8Y_BASEURL, tenant_id=C8Y_TENANT, auth=get_auth())
+    # Initialize Cumulocity API client
+    logger.info(f"Initializing Cumulocity API client with base URL: {C8Y_BASEURL}")
+
+    c8y = CumulocityApi(base_url=C8Y_BASEURL, tenant_id=C8Y_TENANT, auth=get_auth())
+    return c8y
+
+
+@mcp.tool()
+def list_functions() -> str:
+    """Lists available functions derived from the OpenAPI specification."""
+    logger.debug("Executing list_functions tool.")
+    spec_url = os.environ.get("OPENAPI_SPEC_URL")
+    logger.debug(f"Using spec_url: {spec_url}")
+    if not spec_url:
+        raise ValueError("No OPENAPI_SPEC_URL configured.")
+    global spec
+    spec = fetch_openapi_spec(spec_url)
+    if isinstance(spec, str):
+        spec = json.loads(spec)
+    if spec is None:
+        raise ValueError("Spec is None after fetch_openapi_spec")
+
+    logger.debug(f"Raw spec loaded: {json.dumps(spec, indent=2, default=str)}")
+    paths = spec.get("paths", {})
+    logger.debug(f"Paths extracted from spec: {list(paths.keys())}")
+    if not paths:
+        logger.debug("No paths found in spec.")
+        return json.dumps([])
+    functions = {}
+    for path, path_item in paths.items():
+        logger.debug(f"Processing path: {path}")
+        if not path_item:
+            logger.debug(f"Path item is empty for {path}")
+            continue
+        blacklist_check = is_tool_blacklisted(path)
+        logger.debug(f"Whitelist check for {path}: {blacklist_check}")
+        if blacklist_check:
+            logger.debug(f"Path {path} is in blacklist - skipping.")
+            continue
+        for method, operation in path_item.items():
+            logger.debug(f"Found method: {method} for path: {path}")
+            if not method:
+                logger.debug(f"Method is empty for {path}")
+                continue
+            if method.lower() not in settings.methodWhitelist:
+                logger.debug(f"Skipping method that is not whitelisted: {method}")
+                continue
+            raw_name = f"{method.upper()} {path}"
+            function_name = normalize_tool_name(raw_name)
+            if function_name in functions:
+                logger.debug(f"Skipping duplicate function name: {function_name}")
+                continue
+            function_description = operation.get(
+                "summary", operation.get("description", "No description provided.")
+            )
+            logger.debug(
+                f"Registering function: {function_name} - {function_description}"
+            )
+            input_schema = {
+                "type": "object",
+                "properties": {},
+                "required": [],
+                "additionalProperties": False,
+            }
+            placeholder_params = [
+                part.strip("{}")
+                for part in path.split("/")
+                if "{" in part and "}" in part
+            ]
+            for param_name in placeholder_params:
+                input_schema["properties"][param_name] = {
+                    "type": "string",
+                    "description": f"Path parameter {param_name}",
+                }
+                input_schema["required"].append(param_name)
+            for param in operation.get("parameters", []):
+                param_name = param.get("name")
+                param_type = param.get("type", "string")
+                if param_type not in ["string", "integer", "boolean", "number"]:
+                    param_type = "string"
+                input_schema["properties"][param_name] = {
+                    "type": param_type,
+                    "description": param.get(
+                        "description",
+                        f"{param.get('in', 'unknown')} parameter {param_name}",
+                    ),
+                }
+                if (
+                    param.get("required", False)
+                    and param_name not in input_schema["required"]
+                ):
+                    input_schema["required"].append(param_name)
+            functions[function_name] = {
+                "name": function_name,
+                "description": function_description,
+                "path": path,
+                "method": method.upper(),
+                "operationId": operation.get("operationId"),
+                "original_name": raw_name,
+                "inputSchema": input_schema,
+            }
+
+    logger.debug(
+        f"Discovered {len(functions)} functions from the OpenAPI specification."
+    )
+
+    logger.debug(f"Functions list: {list(functions.values())}")
+    return json.dumps(list(functions.values()), indent=2)
+
+
+@mcp.tool()
+def call_function(
+    *,
+    function_name: str,
+    parameters: Optional[Dict] = None,
+) -> str:
+    """Calls a function derived from the OpenAPI specification."""
+    logger.debug(
+        f"call_function invoked with function_name='{function_name}' and parameters={parameters}"
+    )
+    if not function_name:
+        raise ValueError("function_name is empty or None")
+    spec_url = os.environ.get("OPENAPI_SPEC_URL")
+    if not spec_url:
+        raise ValueError("No OPENAPI_SPEC_URL configured.")
+    global spec
+    spec = fetch_openapi_spec(spec_url)
+    if spec is None:
+        raise ValueError("Failed to fetch or parse the OpenAPI specification")
+    logger.debug(f"Spec keys for call_function: {list(spec.keys())}")
+    function_def = None
+    paths = spec.get("paths", {})
+    logger.debug(f"Paths for function lookup: {list(paths.keys())}")
+
+    for path, path_item in paths.items():
+        logger.debug(f"Checking path: {path}")
+        for method, operation in path_item.items():
+            logger.debug(f"Checking method: {method} for path: {path}")
+            if method.lower() not in settings.methodWhitelist:
+                logger.debug(f"Skipping method that is not whitelisted: {method}")
+                continue
+            raw_name = f"{method.upper()} {path}"
+            current_function_name = normalize_tool_name(raw_name)
+            logger.debug(f"Comparing {current_function_name} with {function_name}")
+            if current_function_name == function_name:
+                function_def = {
+                    "path": path,
+                    "method": method.upper(),
+                    "operation": operation,
+                }
+                logger.debug(
+                    f"Matched function definition for '{function_name}': {function_def}"
+                )
+                break
+        if function_def:
+            break
+    if not function_def:
+        raise ValueError(
+            f"Function '{function_name}' not found in the OpenAPI specification."
+        )
+    logger.debug(f"Function def found: {function_def}")
+
+    operation = function_def["operation"]
+    operation["method"] = function_def["method"]
+    headers = get_additional_headers()
+    if parameters is None:
+        parameters = {}
+    parameters = strip_parameters(parameters)
+    logger.debug(f"Parameters after strip: {parameters}")
+    if function_def["method"] != "GET":
+        headers["Content-Type"] = "application/json"
+
+    if is_tool_blacklisted(function_def["path"]):
+        raise ValueError(f"Access to function '{function_name}' is not allowed.")
+
+    base_url = C8Y_BASEURL
+    if not base_url:
+        raise ValueError("No C8Y_BASEURL provided.")
+
+    path = function_def["path"]
+    # Check required path params before substitution
+    path_params_in_openapi = [
+        param["name"]
+        for param in operation.get("parameters", [])
+        if param.get("in") == "path"
+    ]
+    if path_params_in_openapi:
+        missing_required = [
+            param["name"]
+            for param in operation.get("parameters", [])
+            if param.get("in") == "path"
+            and param.get("required", False)
+            and param["name"] not in parameters
+        ]
+        if missing_required:
+            raise ValueError(f"Missing required path parameters: {missing_required}")
+
+    if "{" in path and "}" in path:
+        params_to_remove = []
+        logger.debug(f"Before substitution - Path: {path}, Parameters: {parameters}")
+        for param_name, param_value in parameters.items():
+            if f"{{{param_name}}}" in path:
+                path = path.replace(f"{{{param_name}}}", str(param_value))
+                logger.debug(f"Substituted {param_name}={param_value} in path: {path}")
+                params_to_remove.append(param_name)
+        for param_name in params_to_remove:
+            if param_name in parameters:
+                del parameters[param_name]
+        logger.debug(f"After substitution - Path: {path}, Parameters: {parameters}")
+
+    api_url = f"{base_url.rstrip('/')}/{path.lstrip('/')}"
+    request_params = {}
+    request_body = None
+
+    if isinstance(parameters, dict):
+        if "stream" in parameters and parameters["stream"]:
+            del parameters["stream"]
+        if function_def["method"] == "GET":
+            request_params = parameters
+        else:
+            request_body = parameters
+    else:
+        parameters = {}
+        logger.debug("No valid parameters provided, proceeding without params/body")
+
+    logger.debug(
+        f"Sending request - Method: {function_def['method']}, URL: {api_url}, Headers: {headers}, Params: {request_params}, Body: {request_body}"
+    )
+    # Add SSL verification control for API calls using IGNORE_SSL_TOOLS
+    ignore_ssl_tools = os.getenv("IGNORE_SSL_TOOLS", "false").lower() in (
+        "true",
+        "1",
+        "yes",
+    )
+    verify_ssl_tools = not ignore_ssl_tools
+    logger.debug(
+        f"Sending API request with SSL verification: {verify_ssl_tools} (IGNORE_SSL_TOOLS={ignore_ssl_tools})"
+    )
+    response = requests.request(
+        method=function_def["method"],
+        url=api_url,
+        headers=headers,
+        auth=get_auth(),
+        params=request_params if function_def["method"] == "GET" else None,
+        json=request_body if function_def["method"] != "GET" else None,
+        verify=verify_ssl_tools,
+    )
+    response.raise_for_status()
+    logger.debug(f"API response received: {response.text}")
+    return response.text
 
 
 @mcp.tool()
 async def get_devices(
-    type: str | None = None,
-    name: str | None = None,
+    typeFilter: Optional[str] | None = None,
+    nameFilter: str | None = None,
     page_size: int = 5,
     current_page: int = 1,
 ) -> str:
-    """Get a filtered list of devices from Cumulocity.
-
-    Args:
-        type: Filter by device type
-        name: Filter by device name
-        page_size: Number of results per page (max 2000)
-        current_page: Page number to retrieve
-
-    Returns:
-        TSV formatted string with the following columns:
-        - Device ID: Unique identifier of the device
-        - Device Name: Name of the device
-        - Device Type: Type of the device
-        - Device Owner: Owner of the device
-        - Device Availability: Current availability status
-        - Critical Alarms: Number of critical alarms
-        - Major Alarms: Number of major alarms
-        - Minor Alarms: Number of minor alarms
-        - Warning Alarms: Number of warning alarms
-    """
+    """Get a filtered list of devices from Cumulocity."""
     c8y = get_c8y()
     devices = c8y.device_inventory.get_all(
         page_size=min(page_size, 2000),
         page_number=current_page,
-        type=type,
-        name=name,
+        type=typeFilter if typeFilter is not None else "",
+        name=nameFilter if nameFilter is not None else "",
     )
 
     if len(devices) == 0:
@@ -135,27 +372,12 @@ async def get_devices(
 
 
 @mcp.tool()
-async def get_child_devices(device_id: str, page_size: int = 10) -> str:
-    """Get child devices of a specific device.
-
-    Args:
-        device_id: ID of the parent device
-        page_size: Number of child devices to retrieve (default: 10, max: 2000)
-
-    Returns:
-        TSV formatted string with the following columns:
-        - Device ID: Unique identifier of the device
-        - Device Name: Name of the device
-        - Device Type: Type of the device
-        - Device Owner: Owner of the device
-        - Device Availability: Current availability status
-        - Critical Alarms: Number of critical alarms
-        - Major Alarms: Number of major alarms
-        - Minor Alarms: Number of minor alarms
-        - Warning Alarms: Number of warning alarms
-    """
+async def get_child_devices(parent_device_id: str, page_size: int = 10) -> str:
+    """Get child devices of a specific device."""
     c8y = get_c8y()
-    children = c8y.inventory.get_all(parent=device_id, page_size=min(page_size, 2000))
+    children = c8y.inventory.get_all(
+        parent=parent_device_id, page_size=min(page_size, 2000)
+    )
     if len(children) == 0:
         return "No child devices found"
     return device_formatter.devices_to_table(children)
@@ -168,17 +390,6 @@ async def get_device_context(
 ) -> str:
     """Get comprehensive context for a specific device.
     This includes device fragments, supported measurements, supported operations, and child devices.
-
-    Args:
-        device_id: ID of the device to retrieve context for
-        child_devices_limit: Maximum number of child devices to include in the response (default: 10)
-
-    Returns:
-        Formatted string containing device context including:
-        - Device fragments and their values
-        - List of supported measurements
-        - List of supported operations
-        - Total number of child devices and details for up to the specified limit
     """
     try:
         c8y = get_c8y()
@@ -192,7 +403,7 @@ async def get_device_context(
     output_sections.append(device_formatter.device_to_formatted_string(device))
 
     # 1. Agent Information
-    if hasattr(device, "c8y_Agent") and device.c8y_Agent:
+    if hasattr(device, "c8y_Agent") and isinstance(device.c8y_Agent, dict):
         agent_section = ["## Agent Information"]
         agent_info = device.c8y_Agent
         agent_section.append(f"**Name:** {agent_info.get('name', 'N/A')}")
@@ -258,7 +469,7 @@ async def get_device_context(
             output_sections.append("\n".join(measurements_section))
     except Exception as e:
         # Only log the error but don't include it in the output
-        logger.error(f"Error retrieving supported measurements: {str(e)}")
+        raise ValueError(f"Error retrieving supported measurements: {str(e)}")
 
     # 6. Supported Operations
     if (
@@ -291,7 +502,7 @@ async def get_device_context(
             output_sections.append("\n".join(children_section))
     except Exception as e:
         # Only log the error but don't include it in the output
-        logger.error(f"Error retrieving child devices: {str(e)}")
+        raise ValueError(f"Error retrieving child devices: {str(e)}")
 
     # 8. Additional Device Fragments
     additional_fragments = {}
@@ -324,26 +535,23 @@ async def get_device_context(
 @mcp.tool()
 async def get_device_measurements(
     device_id: str,
-    date_from: str | None = datetime.today().strftime("%Y-%m-%dT00:00:00.000Z"),
-    date_to: str | None = None,
+    date_from: Annotated[
+        str,
+        Field(
+            description="Defaults to Today and needs to be provide in ISO 8601 format with milliseconds and UTC timezone: YYYY-MM-DDThh:mm:ss.sssZ"
+        ),
+    ] = datetime.today().strftime("%Y-%m-%dT00:00:00.000Z"),
+    date_to: Annotated[
+        str,
+        Field(
+            description="Needs to be provide in ISO 8601 format with milliseconds and UTC timezone: YYYY-MM-DDThh:mm:ss.sssZ"
+        ),
+    ] = "",
     page_size: int = 10,
 ) -> str:
     """Get the latest measurements for a specific device.
 
     This tool helps LLMs understand what measurements are available and their current values.
-
-    Args:
-        device_id: ID of the device to retrieve measurements for
-        date_from: Start date and time in ISO 8601 format with milliseconds and UTC timezone.
-                  Format: YYYY-MM-DDThh:mm:ss.sssZ
-                  Defaults to today's date. Examples: "2024-03-20T00:00:00.000Z", "2024-01-01T12:00:00.000Z"
-        date_to: End date and time in ISO 8601 format with milliseconds and UTC timezone.
-                Format: YYYY-MM-DDThh:mm:ss.sssZ
-                Defaults to current time if not specified. Examples: "2024-03-21T23:59:59.999Z", "2024-12-31T00:00:00.000Z"
-        page_size: Number of measurements to retrieve (default: 10, max: 2000)
-
-    Returns:
-        Formatted string containing measurement data in a table format
     """
     try:
         c8y = get_c8y()
@@ -363,35 +571,34 @@ async def get_device_measurements(
         return measurement_formatter.measurements_to_table(measurements)
 
     except Exception as e:
-        logger.error(
+        raise ValueError(
             f"Failed to retrieve measurements for device {device_id}: {str(e)}"
         )
-        raise ValueError(f"Failed to retrieve measurements: {str(e)}")
 
 
 @mcp.tool()
 async def get_active_alarms(
-    severity: str | None = None,
+    severity: Annotated[
+        str,
+        Field(
+            description="Filter by alarm severity ('CRITICAL', 'MAJOR', 'MINOR', 'WARNING')"
+        ),
+    ] = "",
+    status: Annotated[
+        str,
+        Field(
+            description="Filter by alarm status ('ACTIVE', 'ACKNOWLEDGED', 'CLEARED')"
+        ),
+    ] = "ACTIVE",
     page_size: int = 10,
-) -> List[Dict[str, Any]]:
-    """Get active alarms across the platform.
-
-    This tool helps LLMs understand the current state of the platform and any issues.
-
-    Args:
-        severity: Filter by alarm severity ('CRITICAL', 'MAJOR', 'MINOR', 'WARNING')
-        status: Filter by alarm status ('ACTIVE', 'ACKNOWLEDGED', 'CLEARED')
-        page_size: Number of results to retrieve (default: 10, max: 2000)
-
-    Returns:
-        List of alarms including device id, last updated, severity, status, and description
-    """
+) -> str:
+    """Get active alarms across the platform."""
     c8y = get_c8y()
     alarms = c8y.alarms.get_all(
         page_size=min(page_size, 2000),
         page_number=1,
-        severity=None,
-        status="ACTIVE",
+        severity=severity,
+        status=status,
     )
 
     if len(alarms) == 0:

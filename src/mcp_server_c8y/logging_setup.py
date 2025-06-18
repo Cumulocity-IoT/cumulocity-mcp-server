@@ -7,14 +7,18 @@ import os
 import sys
 
 # Initialize logger directly at module level
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("mcp_server_c8y")
 
 
 def setup_logging(verbose: int) -> logging.Logger:
     """Set up logging with the specified debug level."""
 
     # Configure logging based on verbosity
-    logging_level = logging.DEBUG if os.getenv("DEBUG", "").lower() in ("true", "1", "yes") else logging.WARN
+    logging_level = (
+        logging.DEBUG
+        if os.getenv("DEBUG", "").lower() in ("true", "1", "yes")
+        else logging.WARN
+    )
     if verbose == 1:
         logging_level = logging.INFO
     elif verbose >= 2:
