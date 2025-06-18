@@ -13,11 +13,12 @@ from starlette.applications import Starlette
 from starlette.responses import JSONResponse
 from starlette.routing import BaseRoute, Mount, Route
 
+from .logging_setup import setup_logging
 from .server import mcp
+import .settings
 
 # Configure logging
 logger = logging.getLogger(__name__)
-
 
 # CLI Entry Point
 @click.command()
@@ -38,23 +39,13 @@ logger = logging.getLogger(__name__)
     default="",
     help="Root path to mount the application (for reverse proxies)",
 )
-def main(verbose: bool, host: str, port: int, transport: str, root_path: str) -> None:
+def main(verbose: int, host: str, port: int, transport: str, root_path: str) -> None:
     """MCP Cumulocity Server - Cumulocity functionality for MCP"""
-    # Configure logging based on verbosity
-    logging_level = logging.WARN
-    if verbose == 1:
-        logging_level = logging.INFO
-    elif verbose >= 2:
-        logging_level = logging.DEBUG
 
-    logging.basicConfig(
-        level=logging_level,
-        stream=sys.stderr,
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    )
+    logger = setup_logging(verbose)
     logger.info("Starting MCP Cumulocity Server")
 
-    mcp._selected_transport = transport
+    settings.selected_transport = transport
 
     if transport == "stdio":
         asyncio.run(mcp.run_async(transport=transport))

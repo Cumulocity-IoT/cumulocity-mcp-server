@@ -3,7 +3,6 @@ Server initialization and configuration for MCP Cumulocity Server.
 """
 
 import base64
-import logging
 import os
 from datetime import datetime
 from typing import Any, Dict, List
@@ -23,9 +22,8 @@ from .formatters import (
     MeasurementFormatter,
     TableFormatter,
 )
-
-# Configure logging
-logger = logging.getLogger(__name__)
+from .logging_setup import logger
+import .settings
 
 # Load environment variables
 load_dotenv()
@@ -84,7 +82,7 @@ def get_auth():
 
 
 def get_c8y():
-    if mcp._selected_transport == "stdio":
+    if settings.selected_transport == "stdio":
         return CumulocityApi(
             base_url=C8Y_BASEURL,
             tenant_id=C8Y_TENANT,
