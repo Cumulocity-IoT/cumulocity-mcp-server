@@ -11,7 +11,7 @@ import click
 import uvicorn
 from starlette.applications import Starlette
 from starlette.responses import JSONResponse
-from starlette.routing import Mount, Route
+from starlette.routing import BaseRoute, Mount, Route
 
 from .server import mcp
 
@@ -63,7 +63,7 @@ def main(verbose: bool, host: str, port: int, transport: str, root_path: str) ->
         def health(request):
             return JSONResponse({"status": "up"})
 
-        routes = [Route("/health", health)]
+        routes: list[BaseRoute] = [Route("/health", health)]
         lifespan = None
         if transport == "sse":
             appSSE = mcp.sse_app(path="/")
