@@ -13,12 +13,13 @@ from starlette.applications import Starlette
 from starlette.responses import JSONResponse
 from starlette.routing import BaseRoute, Mount, Route
 
+from . import settings
 from .logging_setup import setup_logging
 from .server import mcp
-import .settings
 
 # Configure logging
 logger = logging.getLogger(__name__)
+
 
 # CLI Entry Point
 @click.command()

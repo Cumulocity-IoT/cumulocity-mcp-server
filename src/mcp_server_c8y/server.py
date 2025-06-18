@@ -15,6 +15,8 @@ from fastmcp.server.dependencies import get_http_headers
 from requests.auth import HTTPBasicAuth
 from starlette.exceptions import HTTPException
 
+from . import settings
+
 # Local imports
 from .formatters import (
     AlarmFormatter,
@@ -23,7 +25,6 @@ from .formatters import (
     TableFormatter,
 )
 from .logging_setup import logger
-import .settings
 
 # Load environment variables
 load_dotenv()
