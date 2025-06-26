@@ -366,7 +366,7 @@ class EventFormatter:
         "extractors": {
             "Event ID": lambda e: str(e.id),
             "Source": lambda e: (
-                str(e.source.id)
+                str(e.source)
                 if hasattr(e, "source") and e.source is not None
                 else "Unknown"
             ),
