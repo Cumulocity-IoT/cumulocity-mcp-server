@@ -48,6 +48,14 @@ A Python-based server that provides Cumulocity IoT platform functionality throug
   - `severity`: Filter by severity level
   - `page_size`: Number of results to retrieve
 
+### Dynamic Mapper
+
+**evaluate_jsonata_expression**
+Evaluate a JSONata expression against a given JSON object.
+
+Input: A JSON object as string and a JSONata expression string.
+Output: Result of the JSONata expression evaluation.
+
 ## Installation & Deployment
 
 ### Local Installation

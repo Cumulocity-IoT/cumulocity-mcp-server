@@ -3,6 +3,7 @@ Server initialization and configuration for MCP Cumulocity Server.
 """
 
 import base64
+import json
 import os
 from datetime import datetime
 from typing import Annotated, Optional
@@ -12,6 +13,7 @@ from c8y_api._auth import HTTPBearerAuth
 from dotenv import load_dotenv
 from fastmcp import FastMCP
 from fastmcp.server.dependencies import get_http_headers
+from jsonata import jsonata
 from pydantic import Field
 from requests.auth import HTTPBasicAuth
 from starlette.exceptions import HTTPException
@@ -446,3 +448,27 @@ async def get_events(
         return "No events found"
 
     return event_formatter.events_to_table(events)
+
+@mcp.tool()
+async def evaluate_jsonata_expression(
+        source_json: Annotated[
+            str,
+            Field(
+                description="JSON string to be used as source for the JSONata expression evaluation"
+            ),
+        ] = None,
+        expression: Annotated[
+            str,
+            Field(
+                description="JSONata expression to be evaluated against the source JSON"
+            ),
+        ] = None
+) -> str:
+    """Test a JSONata expression against a JSON string."""
+    #Check if sourceJSON is valid JSON
+    data = json.loads(source_json)
+    #Evaluate the JSONata expression
+    expr = jsonata.Jsonata(expression)
+    result = expr.evaluate(data)
+    return result
+
