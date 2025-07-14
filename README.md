@@ -5,7 +5,52 @@ A Python-based server that provides Cumulocity IoT platform functionality throug
 
 ## Available Tools
 
-#### evaluate_jsonata_expression
+### Device Management
+
+1. **Get Devices**
+   - List and filter devices
+   - Parameters:
+     - `type`: Filter by device type
+     - `name`: Filter by device name
+     - `page_size`: Results per page (max 2000)
+     - `current_page`: Page number
+
+2. **Get Device by ID**
+   - Retrieve detailed information for a specific device
+   - Parameter:
+     - `device_id`: Device identifier
+
+3. **Get Child Devices**
+   - View child devices of a specific device
+   - Parameter:
+     - `device_id`: Parent device identifier
+
+4. **Get Device Fragments**
+   - Access device fragments and their values
+   - Parameter:
+     - `device_id`: Device identifier
+
+### Measurements
+
+**Get Device Measurements**
+- Retrieve device measurements with time filtering
+- Parameters:
+  - `device_id`: Device identifier
+  - `date_from`: Start date (ISO 8601 format)
+  - `date_to`: End date (ISO 8601 format)
+  - `page_size`: Number of measurements to retrieve
+
+### Alarms
+
+**Get Active Alarms**
+- Monitor active alarms in the system
+- Parameters:
+  - `severity`: Filter by severity level
+  - `page_size`: Number of results to retrieve
+
+### Dynamic Mapper
+
+**evaluate_jsonata_expression**
 Evaluate a JSONata expression against a given JSON object.
 
 Input: A JSON object as string and a JSONata expression string.
