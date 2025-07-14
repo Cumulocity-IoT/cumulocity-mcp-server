@@ -38,9 +38,6 @@ C8Y_BASEURL = os.getenv("C8Y_BASEURL", "")
 C8Y_TENANT = os.getenv("C8Y_TENANT", "")
 C8Y_USER = os.getenv("C8Y_USER", "")
 C8Y_PASSWORD = os.getenv("C8Y_PASSWORD", "")
-spec_url = os.environ.get(
-    "OPENAPI_SPEC_URL", "https://cumulocity.com/api/core/dist/c8y-oas.yml"
-)
 
 # Validate required environment variables
 if not all([C8Y_BASEURL, C8Y_TENANT]):
@@ -50,7 +47,6 @@ if not all([C8Y_BASEURL, C8Y_TENANT]):
 
 # Initialize MCP server
 mcp = FastMCP("C8Y MCP Server")
-spec = None  # Global spec for resources
 c8y = None
 
 # Initialize formatters
@@ -120,13 +116,30 @@ async def get_devices(
     c8y = get_c8y()
     devices = None
 
-    # "query": "$filter=((has(c8y_IsDevice)) or (has(c8y_IsDynamicGroup)) or (has(c8y_IsDeviceGroup)))",
-    devices = c8y.device_inventory.get_all(
-        page_size=min(page_size, 2000),
-        page_number=current_page,
-        type=typeFilter,
-        text=nameFilter,
-    )
+    if typeFilter is not None and nameFilter is not None:
+        devices = c8y.device_inventory.get_all(
+            page_size=min(page_size, 2000),
+            page_number=current_page,
+            type=typeFilter,
+            text=nameFilter,
+        )
+    elif typeFilter is not None:
+        devices = c8y.device_inventory.get_all(
+            page_size=min(page_size, 2000),
+            page_number=current_page,
+            type=typeFilter,
+        )
+    elif nameFilter is not None:
+        devices = c8y.device_inventory.get_all(
+            page_size=min(page_size, 2000),
+            page_number=current_page,
+            text=nameFilter,
+        )
+    else:
+        devices = c8y.device_inventory.get_all(
+            page_size=min(page_size, 2000),
+            page_number=current_page,
+        )
 
     if len(devices) == 0:
         return "No devices found"
@@ -449,26 +462,24 @@ async def get_events(
 
     return event_formatter.events_to_table(events)
 
+
 @mcp.tool()
 async def evaluate_jsonata_expression(
-        source_json: Annotated[
-            str,
-            Field(
-                description="JSON string to be used as source for the JSONata expression evaluation"
-            ),
-        ] = None,
-        expression: Annotated[
-            str,
-            Field(
-                description="JSONata expression to be evaluated against the source JSON"
-            ),
-        ] = None
+    source_json: Annotated[
+        str,
+        Field(
+            description="JSON string to be used as source for the JSONata expression evaluation"
+        ),
+    ],
+    expression: Annotated[
+        str,
+        Field(description="JSONata expression to be evaluated against the source JSON"),
+    ],
 ) -> str:
     """Test a JSONata expression against a JSON string."""
-    #Check if sourceJSON is valid JSON
+    # Check if sourceJSON is valid JSON
     data = json.loads(source_json)
-    #Evaluate the JSONata expression
+    # Evaluate the JSONata expression
     expr = jsonata.Jsonata(expression)
     result = expr.evaluate(data)
-    return result
-
+    return str(result) if result is not None else ""
