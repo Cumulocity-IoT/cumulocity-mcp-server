@@ -4,8 +4,6 @@ MCP Cumulocity Server - Cumulocity functionality for MCP
 
 import asyncio
 import logging
-import os
-import sys
 
 import click
 import uvicorn
@@ -17,8 +15,7 @@ from . import settings
 from .logging_setup import setup_logging
 from .server import mcp
 
-# Configure logging
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("mcp_server_c8y")
 
 
 # CLI Entry Point
@@ -43,7 +40,7 @@ logger = logging.getLogger(__name__)
 def main(verbose: int, host: str, port: int, transport: str, root_path: str) -> None:
     """MCP Cumulocity Server - Cumulocity functionality for MCP"""
 
-    logger = setup_logging(verbose)
+    setup_logging(verbose)
     logger.info("Starting MCP Cumulocity Server")
 
     settings.init()

@@ -16,4 +16,4 @@ fi
 # - Ignores empty lines and comments
 # - Preserves quotes in values
 # - Adds -e prefix to each line
-grep -v '^#' "$1" | grep -v '^$' | sed 's/^/-e /' 
+grep -v '^#' "$1" | grep -v '^$' | sed 's/^/-e /' | tr '\n' ' '

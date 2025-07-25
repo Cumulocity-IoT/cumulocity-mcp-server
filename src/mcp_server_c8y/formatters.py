@@ -59,28 +59,28 @@ class DeviceFormatter:
                 if hasattr(d, "c8y_ActiveAlarmsStatus")
                 and hasattr(d.c8y_ActiveAlarmsStatus, "critical")
                 and d.c8y_ActiveAlarmsStatus.critical is not None
-                else "0"
+                else "Unknown"
             ),
             "Major Alarms": lambda d: (
                 str(d.c8y_ActiveAlarmsStatus.major)
                 if hasattr(d, "c8y_ActiveAlarmsStatus")
                 and hasattr(d.c8y_ActiveAlarmsStatus, "major")
                 and d.c8y_ActiveAlarmsStatus.major is not None
-                else "0"
+                else "Unknown"
             ),
             "Minor Alarms": lambda d: (
                 str(d.c8y_ActiveAlarmsStatus.minor)
                 if hasattr(d, "c8y_ActiveAlarmsStatus")
                 and hasattr(d.c8y_ActiveAlarmsStatus, "minor")
                 and d.c8y_ActiveAlarmsStatus.minor is not None
-                else "0"
+                else "Unknown"
             ),
             "Warning Alarms": lambda d: (
                 str(d.c8y_ActiveAlarmsStatus.warning)
                 if hasattr(d, "c8y_ActiveAlarmsStatus")
                 and hasattr(d.c8y_ActiveAlarmsStatus, "warning")
                 and d.c8y_ActiveAlarmsStatus.warning is not None
-                else "0"
+                else "Unknown"
             ),
         },
     }

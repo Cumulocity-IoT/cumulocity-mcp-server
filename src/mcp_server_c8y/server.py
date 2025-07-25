@@ -4,12 +4,14 @@ Server initialization and configuration for MCP Cumulocity Server.
 
 import base64
 import json
+import logging
 import os
 from datetime import datetime
 from typing import Annotated, Optional
 
 from c8y_api import CumulocityApi
 from c8y_api._auth import HTTPBearerAuth
+from c8y_api.model import Device
 from dotenv import load_dotenv
 from fastmcp import FastMCP
 from fastmcp.server.dependencies import get_http_headers
@@ -28,7 +30,8 @@ from .formatters import (
     MeasurementFormatter,
     TableFormatter,
 )
-from .logging_setup import logger
+
+logger = logging.getLogger("mcp_server_c8y")
 
 # Load environment variables
 load_dotenv()
@@ -89,7 +92,7 @@ def get_auth():
 
 def get_c8y():
     global c8y
-    if c8y:
+    if c8y is not None:
         return c8y
 
     # Initialize Cumulocity API client
@@ -99,20 +102,85 @@ def get_c8y():
     return c8y
 
 
+import requests
+
+
+def get_asset_with_parents(asset_id):
+    # Get authentication from the existing get_auth function
+    auth = get_auth()
+
+    # Get the C8Y API instance
+    c8y = get_c8y()
+
+    # Construct the URL
+    url = f"https://{C8Y_BASEURL}/inventory/managedObjects/{asset_id}"
+
+    # Add the withParents parameter
+    params = {"withParents": "true"}
+
+    # Make the HTTP request
+    response = requests.get(
+        url=url, params=params, auth=auth, headers={"Accept": "application/json"}
+    )
+
+    # Check if the request was successful
+    response.raise_for_status()
+
+    assetWithParents = response.json()
+    asset = Device.from_json(assetWithParents)
+
+    try:
+        parent_assets = assetWithParents["assetParents"]["references"]
+        parent_asset_ids = [asset["managedObject"]["id"] for asset in parent_assets]
+        logger.info(
+            f"Retrieved {len(parent_asset_ids)} parent assets from asset {asset_id}"
+        )
+        if len(parent_asset_ids) > 0:
+            asset.parent_assets = c8y.inventory.get_all(
+                ids=parent_asset_ids,
+                with_children=False,
+                page_size=len(parent_asset_ids),
+            )
+    except Exception as e:
+        logger.info(f"Could not retrieve parent assets from asset {asset_id}: {str(e)}")
+
+    try:
+        parent_devices = assetWithParents["deviceParents"]["references"]
+        parent_devices_ids = [asset["managedObject"]["id"] for asset in parent_devices]
+        logger.info(
+            f"Retrieved {len(parent_devices_ids)} parent assets from asset {asset_id}"
+        )
+        if len(parent_devices_ids) > 0:
+            asset.parent_devices = c8y.inventory.get_all(
+                ids=parent_devices_ids,
+                with_children=False,
+                page_size=len(parent_asset_ids),
+            )
+    except Exception as e:
+        logger.info(
+            f"Could not retrieve parent devices from asset {asset_id}: {str(e)}"
+        )
+
+    # Return the C8Y Device
+    return asset
+
+
 @mcp.tool()
-async def get_devices(
+async def get_assets(
     typeFilter: Annotated[
         Optional[str] | None,
-        Field(description="If provided, only devices of this type will be returned."),
+        Field(
+            description="If provided, only assets including devices of this type will be returned."
+        ),
     ] = None,
     nameFilter: Annotated[
         Optional[str] | None,
-        Field(description="Filter devices by name."),
+        Field(description="Filter assets including devices by name."),
     ] = None,
     page_size: int = 20,
     current_page: int = 1,
 ) -> str:
-    """Get a filtered list of devices from Cumulocity."""
+    """Get a filtered list of assets including devices from Cumulocity."""
     c8y = get_c8y()
     devices = None
 
@@ -142,7 +210,7 @@ async def get_devices(
         )
 
     if len(devices) == 0:
-        return "No devices found"
+        return "No assets found"
     return device_formatter.devices_to_table(devices)
 
 
@@ -461,6 +529,67 @@ async def get_events(
         return "No events found"
 
     return event_formatter.events_to_table(events)
+
+
+@mcp.tool()
+async def get_asset_hierarchy(
+    asset_id: Annotated[
+        str,
+        Field(description="Asset ID for which to retrieve the asset hierarchy."),
+    ],
+) -> str:
+    """Get the complete asset hierarchy for a specific asset or device by retrieving all parent managed objects.
+
+    This uses the 'withParents' option to fetch the complete hierarchy chain above the specified asset or device.
+    """
+    try:
+        # Get parent objects using the withParents option
+        assetWithParents = get_asset_with_parents(asset_id)
+
+        # Format the hierarchy
+        hierarchy_section = ["# Asset Hierarchy"]
+        if len(assetWithParents.parent_assets) > 0:
+            hierarchy_section.append(
+                f"Parent assets for '{assetWithParents.name}' ({asset_id}):"
+            )
+            hierarchy_section.append(
+                device_formatter.devices_to_table(assetWithParents.parent_assets)
+            )
+            hierarchy_section.append("")
+
+        if len(assetWithParents.parent_devices) > 0:
+            hierarchy_section.append(
+                f"Parent devices for '{assetWithParents.name}' ({asset_id}):"
+            )
+            hierarchy_section.append(
+                device_formatter.devices_to_table(assetWithParents.parent_devices)
+            )
+            hierarchy_section.append("")
+
+        if len(assetWithParents.child_assets) > 0:
+            hierarchy_section.append(
+                f"Child assets for '{assetWithParents.name}' ({asset_id}):"
+            )
+            hierarchy_section.append(
+                device_formatter.devices_to_table(assetWithParents.child_assets)
+            )
+            hierarchy_section.append("")
+
+        if len(assetWithParents.child_devices) > 0:
+            hierarchy_section.append(
+                f"Child devices for '{assetWithParents.name}' ({asset_id}):"
+            )
+            hierarchy_section.append(
+                device_formatter.devices_to_table(assetWithParents.child_devices)
+            )
+            hierarchy_section.append("")
+
+        return "\n".join(hierarchy_section)
+
+    except Exception as e:
+        raise ValueError(
+            f"Failed to retrieve asset hierarchy for asset {asset_id}: {str(e)}"
+        )
 
 
 @mcp.tool()
