@@ -9,6 +9,7 @@ import os
 from datetime import datetime
 from typing import Annotated, Optional
 
+import requests
 from c8y_api import CumulocityApi
 from c8y_api._auth import HTTPBearerAuth
 from c8y_api.model import Device
@@ -102,9 +103,6 @@ def get_c8y():
     return c8y
 
 
-import requests
-
-
 def get_asset_with_parents(asset_id):
     # Get authentication from the existing get_auth function
     auth = get_auth()
@@ -113,7 +111,7 @@ def get_asset_with_parents(asset_id):
     c8y = get_c8y()
 
     # Construct the URL
-    url = f"https://{C8Y_BASEURL}/inventory/managedObjects/{asset_id}"
+    url = f"{c8y.base_url}/inventory/managedObjects/{asset_id}"
 
     # Add the withParents parameter
     params = {"withParents": "true"}
@@ -542,6 +540,7 @@ async def get_asset_hierarchy(
 
     This uses the 'withParents' option to fetch the complete hierarchy chain above the specified asset or device.
     """
+    columns = ["Device ID", "Device Name", "Device Type", "Device Owner"]
     try:
         # Get parent objects using the withParents option
         assetWithParents = get_asset_with_parents(asset_id)
@@ -553,7 +552,9 @@ async def get_asset_hierarchy(
                 f"Parent assets for '{assetWithParents.name}' ({asset_id}):"
             )
             hierarchy_section.append(
-                device_formatter.devices_to_table(assetWithParents.parent_assets)
+                device_formatter.devices_to_table(
+                    assetWithParents.parent_assets, columns=columns
+                )
             )
             hierarchy_section.append("")
 
@@ -562,7 +563,9 @@ async def get_asset_hierarchy(
                 f"Parent devices for '{assetWithParents.name}' ({asset_id}):"
             )
             hierarchy_section.append(
-                device_formatter.devices_to_table(assetWithParents.parent_devices)
+                device_formatter.devices_to_table(
+                    assetWithParents.parent_devices, columns=columns
+                )
             )
             hierarchy_section.append("")
 
@@ -571,16 +574,21 @@ async def get_asset_hierarchy(
                 f"Child assets for '{assetWithParents.name}' ({asset_id}):"
             )
             hierarchy_section.append(
-                device_formatter.devices_to_table(assetWithParents.child_assets)
+                device_formatter.devices_to_table(
+                    assetWithParents.child_assets, columns=columns
+                )
             )
             hierarchy_section.append("")
 
+        columns = ["Device ID", "Device Name"]
         if len(assetWithParents.child_devices) > 0:
             hierarchy_section.append(
                 f"Child devices for '{assetWithParents.name}' ({asset_id}):"
             )
             hierarchy_section.append(
-                device_formatter.devices_to_table(assetWithParents.child_devices)
+                device_formatter.devices_to_table(
+                    assetWithParents.child_devices, columns=columns
+                )
             )
             hierarchy_section.append("")
 

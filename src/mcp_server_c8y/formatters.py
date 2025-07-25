@@ -4,7 +4,7 @@ Formatters for Cumulocity data types.
 
 import json
 import unicodedata
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional, Sequence
 
 from c8y_api.model import Alarm, Device, ManagedObject, Measurement
 from tabulate import tabulate
@@ -96,19 +96,25 @@ class DeviceFormatter:
         self.columns = self.config["columns"]
         self.extractors = self.config["extractors"]
 
-    def device_to_row(self, device: Device | ManagedObject) -> List[str]:
+    def device_to_row(self, device: Device | ManagedObject, columns: Optional[Sequence[str]] = None) -> List[str]:
         """Convert a Device object to a list of values.
 
         Args:
             device: Device object from Cumulocity API
+            columns: Optional list of column names to include. If None, uses all columns.
 
         Returns:
             List of string values representing device data
         """
-        return [extractor(device) for extractor in self.extractors.values()]
+        if columns is None:
+            return [self.extractors[col](device) for col in self.columns]
+        return [self.extractors[col](device) for col in columns if col in self.extractors]
 
     def devices_to_table(
-        self, devices: List[ManagedObject] | List[Device], tablefmt: str = "tsv"
+        self, 
+        devices: List[ManagedObject] | List[Device], 
+        tablefmt: str = "tsv", 
+        columns: Optional[Sequence[str]] = None
     ) -> str:
         """Convert a list of Device objects to a formatted table.
 
@@ -116,24 +122,38 @@ class DeviceFormatter:
             devices: List of Device objects from Cumulocity API
             tablefmt: Table format to use (default: 'tsv').
                      See tabulate documentation for available formats.
+            columns: Optional list of column names to include. If None, uses all columns.
 
         Returns:
             Formatted string containing the complete table with header and data rows
         """
-        rows = [self.device_to_row(device) for device in devices]
-        return tabulate(rows, headers=self.columns, tablefmt=tablefmt)
+        use_columns = columns if columns is not None else self.columns
+        valid_columns = [col for col in use_columns if col in self.extractors]
+        
+        rows = [self.device_to_row(device, valid_columns) for device in devices]
+        if tablefmt == "json":
+            return json.dumps(rows)
+        return tabulate(rows, headers=valid_columns, tablefmt=tablefmt)
 
-    def device_to_formatted_string(self, device: Device | ManagedObject) -> str:
+    def device_to_formatted_string(
+        self, 
+        device: Device | ManagedObject, 
+        columns: Optional[Sequence[str]] = None
+    ) -> str:
         """Convert a Device object to a formatted string with key-value pairs.
 
         Args:
             device: Device object from Cumulocity API
+            columns: Optional list of column names to include. If None, uses all columns.
 
         Returns:
             Formatted string with key-value pairs, one per line
         """
+        use_columns = columns if columns is not None else self.columns
+        valid_columns = [col for col in use_columns if col in self.extractors]
+        
         data = [
-            [column, extractor(device)] for column, extractor in self.extractors.items()
+            [column, self.extractors[column](device)] for column in valid_columns
         ]
         return tabulate(data, tablefmt="plain")
 
